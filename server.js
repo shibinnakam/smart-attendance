@@ -4,6 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const cron = require('node-cron');   // ✅ Added for auto reset
 const Attendance = require('./models/Attendance');
 const User = require('./models/User');
 
@@ -33,11 +34,14 @@ app.post('/register', async (req, res) => {
 
 // Mark attendance
 app.post('/attendance', async (req, res) => {
+  console.log("POST body received:", req.body);
   try {
     const { cardUID } = req.body;
-    const user = await User.findOne({ cardUID });
+    console.log("Card UID from ESP32:", cardUID);
 
+    const user = await User.findOne({ cardUID });
     if (!user) {
+      console.log("Card not registered:", cardUID);
       return res.status(404).json({ message: 'Card not registered' });
     }
 
@@ -48,7 +52,6 @@ app.post('/attendance', async (req, res) => {
     let record = await Attendance.findOne({ cardUID, date: dateStr });
 
     if (!record) {
-      // First scan → mark IN
       record = new Attendance({
         cardUID,
         name: user.name,
@@ -56,14 +59,16 @@ app.post('/attendance', async (req, res) => {
         inTime: timeStr
       });
       await record.save();
+      console.log("Marked IN for:", cardUID);
       return res.json({ message: 'Marked IN', record });
     } else {
-      // Second scan → mark OUT
       record.outTime = timeStr;
       await record.save();
+      console.log("Marked OUT for:", cardUID);
       return res.json({ message: 'Marked OUT', record });
     }
   } catch (err) {
+    console.error("Error in /attendance:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -80,6 +85,22 @@ app.get('/attendance/month/:month', async (req, res) => {
   const { month } = req.params; // "2025-09"
   const records = await Attendance.find({ date: { $regex: `^${month}` } });
   res.json(records);
+});
+
+// ✅ CRON JOB: Auto mark OUT at 23:59 if missing
+cron.schedule('59 23 * * *', async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await Attendance.updateMany(
+      { date: today, outTime: { $exists: false } },
+      { $set: { outTime: "23:59:59" } }
+    );
+
+    console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59`);
+  } catch (err) {
+    console.error("❌ Error in auto OUT cron:", err);
+  }
 });
 
 const PORT = process.env.PORT || 3000;
