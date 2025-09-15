@@ -37,9 +37,14 @@ app.get('/', (req, res) => {
 });
 
 // --------------------- USER REGISTRATION ---------------------
+// --------------------- USER REGISTRATION ---------------------
 app.post('/register', async (req, res) => {
   try {
-    const { name, cardUID } = req.body;
+    let { name, cardUID } = req.body;
+
+    // Normalize UID (uppercase + padded to 8 chars)
+    cardUID = cardUID.toUpperCase().padStart(8, "0");
+
     const user = new User({ name, cardUID });
     await user.save();
     res.json({ message: 'User registered', user });
@@ -51,7 +56,11 @@ app.post('/register', async (req, res) => {
 // --------------------- MARK ATTENDANCE ---------------------
 app.post('/attendance', async (req, res) => {
   try {
-    const { cardUID } = req.body;
+    let { cardUID } = req.body;
+
+    // Normalize UID (uppercase + padded to 8 chars)
+    cardUID = cardUID.toUpperCase().padStart(8, "0");
+
     const user = await User.findOne({ cardUID });
     if (!user) return res.status(404).json({ message: 'Card not registered' });
 
@@ -61,7 +70,12 @@ app.post('/attendance', async (req, res) => {
 
     let record = await Attendance.findOne({ cardUID, date: dateStr });
     if (!record) {
-      record = new Attendance({ cardUID, name: user.name, date: dateStr, inTime: timeStr });
+      record = new Attendance({
+        cardUID,
+        name: user.name,
+        date: dateStr,
+        inTime: timeStr
+      });
       await record.save();
       return res.json({ message: 'Marked IN', record });
     } else {
@@ -74,6 +88,7 @@ app.post('/attendance', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // --------------------- ATTENDANCE VIEW ---------------------
 
