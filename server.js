@@ -20,7 +20,7 @@ app.use(bodyParser.json());
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Serve static files from 'public'
+// Serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
 // --------------------- DATABASE ---------------------
@@ -33,7 +33,7 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // --------------------- HOME PAGE ---------------------
 app.get('/', (req, res) => {
-  res.render('home'); // loads views/home.ejs
+  res.render('home');
 });
 
 // --------------------- USER REGISTRATION ---------------------
@@ -75,32 +75,24 @@ app.post('/attendance', async (req, res) => {
   }
 });
 
-// --------------------- API ENDPOINTS ---------------------
-app.get('/attendance/today', async (req, res) => {
-  const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
-  const records = await Attendance.find({ date: today });
-  res.json(records);
-});
-
-app.get('/attendance/month/:month', async (req, res) => {
-  const { month } = req.params; // e.g. "2025-09"
-  const records = await Attendance.find({ date: { $regex: `^${month}` } });
-  res.json(records);
-});
-
 // --------------------- ATTENDANCE VIEW ---------------------
 
-// 1️⃣ Today’s attendance page
+// Function to generate last 7 days for sidebar
+function getLast7Days() {
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    days.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
+  }
+  return days;
+}
+
+// 1️⃣ Today attendance
 app.get('/attendance-page', async (req, res) => {
   try {
     const selectedDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
-    const records = await Attendance.find({ date: selectedDate });
+    const records = await Attendance.find({ date: selectedDate }).sort({ inTime: 1 });
 
-    const dates = [];
-    for (let i = 0; i < 30; i++) {
-      dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
-    }
-
+    const dates = getLast7Days();
     res.render("attendance", { records, selectedDate, dates });
   } catch (err) {
     console.error("Error loading attendance page:", err);
@@ -108,17 +100,13 @@ app.get('/attendance-page', async (req, res) => {
   }
 });
 
-// 2️⃣ Specific date attendance page
+// 2️⃣ Specific date
 app.get('/attendance-page/:date', async (req, res) => {
   try {
     const selectedDate = req.params.date;
-    const records = await Attendance.find({ date: selectedDate });
+    const records = await Attendance.find({ date: selectedDate }).sort({ inTime: 1 });
 
-    const dates = [];
-    for (let i = 0; i < 30; i++) {
-      dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
-    }
-
+    const dates = getLast7Days();
     res.render("attendance", { records, selectedDate, dates });
   } catch (err) {
     console.error("Error loading attendance page:", err);
@@ -127,6 +115,7 @@ app.get('/attendance-page/:date', async (req, res) => {
 });
 
 // --------------------- CRON JOB ---------------------
+// Auto mark OUT at 23:59 IST
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
