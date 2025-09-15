@@ -11,17 +11,19 @@ const Attendance = require('./models/Attendance');
 const User = require('./models/User');
 
 const app = express();
+
+// --------------------- MIDDLEWARE ---------------------
 app.use(cors());
 app.use(bodyParser.json());
 
-// ✅ Set EJS as view engine
+// Set EJS as view engine
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// ✅ Serve static files (for CSS/JS)
+// Serve static files from 'public'
 app.use(express.static(path.join(__dirname, "public")));
 
-// Connect MongoDB
+// --------------------- DATABASE ---------------------
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -29,9 +31,12 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB Error:', err));
 
-/* -------------------------------
-   USER REGISTRATION
---------------------------------*/
+// --------------------- HOME PAGE ---------------------
+app.get('/', (req, res) => {
+  res.render('home'); // loads views/home.ejs
+});
+
+// --------------------- USER REGISTRATION ---------------------
 app.post('/register', async (req, res) => {
   try {
     const { name, cardUID } = req.body;
@@ -43,9 +48,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-/* -------------------------------
-   MARK ATTENDANCE
---------------------------------*/
+// --------------------- MARK ATTENDANCE ---------------------
 app.post('/attendance', async (req, res) => {
   try {
     const { cardUID } = req.body;
@@ -72,9 +75,7 @@ app.post('/attendance', async (req, res) => {
   }
 });
 
-/* -------------------------------
-   API ENDPOINTS
---------------------------------*/
+// --------------------- API ENDPOINTS ---------------------
 app.get('/attendance/today', async (req, res) => {
   const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
   const records = await Attendance.find({ date: today });
@@ -87,12 +88,9 @@ app.get('/attendance/month/:month', async (req, res) => {
   res.json(records);
 });
 
-/* -------------------------------
-   ATTENDANCE VIEW PAGE (EJS)
-   Two separate routes (no ? in param)
---------------------------------*/
+// --------------------- ATTENDANCE VIEW ---------------------
 
-// 1️⃣ Today’s attendance
+// 1️⃣ Today’s attendance page
 app.get('/attendance-page', async (req, res) => {
   try {
     const selectedDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
@@ -110,7 +108,7 @@ app.get('/attendance-page', async (req, res) => {
   }
 });
 
-// 2️⃣ Specific date attendance
+// 2️⃣ Specific date attendance page
 app.get('/attendance-page/:date', async (req, res) => {
   try {
     const selectedDate = req.params.date;
@@ -128,9 +126,7 @@ app.get('/attendance-page/:date', async (req, res) => {
   }
 });
 
-/* -------------------------------
-   CRON JOB: Auto mark OUT at 23:59 IST
---------------------------------*/
+// --------------------- CRON JOB ---------------------
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
@@ -144,8 +140,6 @@ cron.schedule('59 23 * * *', async () => {
   }
 });
 
-/* -------------------------------
-   START SERVER
---------------------------------*/
+// --------------------- START SERVER ---------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
