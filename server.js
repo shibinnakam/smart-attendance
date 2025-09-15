@@ -4,14 +4,20 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const cron = require('node-cron');   
-const moment = require('moment-timezone');  // ✅ For timezone handling
+const cron = require('node-cron');
+const moment = require('moment-timezone');
+const path = require('path');
+
 const Attendance = require('./models/Attendance');
 const User = require('./models/User');
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+
+// ✅ Set EJS as view engine
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
 
 // Connect MongoDB
 mongoose.connect(process.env.MONGO_URI, {
@@ -21,7 +27,9 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB Error:', err));
 
-// Register a new user (assign card)
+/* -------------------------------
+   USER REGISTRATION
+--------------------------------*/
 app.post('/register', async (req, res) => {
   try {
     const { name, cardUID } = req.body;
@@ -33,7 +41,9 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// Mark attendance
+/* -------------------------------
+   MARK ATTENDANCE
+--------------------------------*/
 app.post('/attendance', async (req, res) => {
   console.log("POST body received:", req.body);
   try {
@@ -46,7 +56,6 @@ app.post('/attendance', async (req, res) => {
       return res.status(404).json({ message: 'Card not registered' });
     }
 
-    // ✅ Use IST timezone
     const now = moment().tz("Asia/Kolkata");
     const dateStr = now.format("YYYY-MM-DD");
     const timeStr = now.format("HH:mm:ss");
@@ -75,21 +84,52 @@ app.post('/attendance', async (req, res) => {
   }
 });
 
-// Get today’s attendance
+/* -------------------------------
+   API ENDPOINTS
+--------------------------------*/
+
+// Today’s attendance (JSON API)
 app.get('/attendance/today', async (req, res) => {
   const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
   const records = await Attendance.find({ date: today });
   res.json(records);
 });
 
-// Get full month attendance
+// Full month attendance (JSON API)
 app.get('/attendance/month/:month', async (req, res) => {
-  const { month } = req.params; // "2025-09"
+  const { month } = req.params; // e.g. "2025-09"
   const records = await Attendance.find({ date: { $regex: `^${month}` } });
   res.json(records);
 });
 
-// ✅ CRON JOB: Auto mark OUT at 23:59 IST if missing
+/* -------------------------------
+   ATTENDANCE VIEW PAGE (EJS)
+--------------------------------*/
+app.get('/attendance-page/:date?', async (req, res) => {
+  try {
+    const selectedDate =
+      req.params.date ||
+      req.query.date ||
+      moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+
+    const records = await Attendance.find({ date: selectedDate });
+
+    // Generate last 7 days list for sidebar
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
+    }
+
+    res.render("attendance", { records, selectedDate, dates });
+  } catch (err) {
+    console.error("Error loading attendance page:", err);
+    res.status(500).send("Error loading attendance page");
+  }
+});
+
+/* -------------------------------
+   CRON JOB: Auto mark OUT at 23:59
+--------------------------------*/
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
@@ -105,5 +145,8 @@ cron.schedule('59 23 * * *', async () => {
   }
 });
 
+/* -------------------------------
+   START SERVER
+--------------------------------*/
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Attendance Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      margin: 0;
+    }
+    .sidebar {
+      width: 200px;
+      background: #f4f4f4;
+      padding: 20px;
+      height: 100vh;
+    }
+    .sidebar h3 { margin-top: 0; }
+    .sidebar ul { list-style: none; padding: 0; }
+    .sidebar ul li { margin: 8px 0; }
+    .sidebar ul li a {
+      text-decoration: none;
+      color: #333;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 20px;
+    }
+    table th, table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    table th {
+      background: #333;
+      color: white;
+    }
+    input[type="date"] {
+      padding: 6px;
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h3>Last 7 Days</h3>
+    <ul>
+      <% dates.forEach(d => { %>
+        <li><a href="/attendance-page/<%= d %>"><%= d %></a></li>
+      <% }) %>
+    </ul>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <h2>Attendance for <%= selectedDate %></h2>
+
+    <!-- Calendar Picker -->
+    <input 
+      type="date" 
+      value="<%= selectedDate %>" 
+      onchange="window.location.href='/attendance-page/' + this.value" 
+    />
+
+    <% if (records.length === 0) { %>
+      <p>No records found for this date.</p>
+    <% } else { %>
+      <table>
+        <tr>
+          <th>Name</th>
+          <th>Card UID</th>
+          <th>In Time</th>
+          <th>Out Time</th>
+        </tr>
+        <% records.forEach(r => { %>
+          <tr>
+            <td><%= r.name %></td>
+            <td><%= r.cardUID %></td>
+            <td><%= r.inTime %></td>
+            <td><%= r.outTime || "-" %></td>
+          </tr>
+        <% }) %>
+      </table>
+    <% } %>
+  </div>
+</body>
+</html>
