@@ -4,7 +4,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const cron = require('node-cron');   // ✅ Added for auto reset
+const cron = require('node-cron');   
+const moment = require('moment-timezone');  // ✅ For timezone handling
 const Attendance = require('./models/Attendance');
 const User = require('./models/User');
 
@@ -45,9 +46,10 @@ app.post('/attendance', async (req, res) => {
       return res.status(404).json({ message: 'Card not registered' });
     }
 
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
-    const timeStr = today.toLocaleTimeString();
+    // ✅ Use IST timezone
+    const now = moment().tz("Asia/Kolkata");
+    const dateStr = now.format("YYYY-MM-DD");
+    const timeStr = now.format("HH:mm:ss");
 
     let record = await Attendance.findOne({ cardUID, date: dateStr });
 
@@ -75,7 +77,7 @@ app.post('/attendance', async (req, res) => {
 
 // Get today’s attendance
 app.get('/attendance/today', async (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
   const records = await Attendance.find({ date: today });
   res.json(records);
 });
@@ -87,17 +89,17 @@ app.get('/attendance/month/:month', async (req, res) => {
   res.json(records);
 });
 
-// ✅ CRON JOB: Auto mark OUT at 23:59 if missing
+// ✅ CRON JOB: Auto mark OUT at 23:59 IST if missing
 cron.schedule('59 23 * * *', async () => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
     const result = await Attendance.updateMany(
       { date: today, outTime: { $exists: false } },
       { $set: { outTime: "23:59:59" } }
     );
 
-    console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59`);
+    console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59 (IST)`);
   } catch (err) {
     console.error("❌ Error in auto OUT cron:", err);
   }
