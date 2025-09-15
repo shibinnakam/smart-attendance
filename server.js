@@ -37,7 +37,6 @@ app.get('/', (req, res) => {
 });
 
 // --------------------- USER REGISTRATION ---------------------
-// --------------------- USER REGISTRATION ---------------------
 app.post('/register', async (req, res) => {
   try {
     let { name, cardUID } = req.body;
@@ -62,14 +61,18 @@ app.post('/attendance', async (req, res) => {
     cardUID = cardUID.toUpperCase().padStart(8, "0");
 
     const user = await User.findOne({ cardUID });
-    if (!user) return res.status(404).json({ message: 'Card not registered' });
+    if (!user) {
+      return res.status(404).json({ message: 'Card not registered' });
+    }
 
     const now = moment().tz("Asia/Kolkata");
     const dateStr = now.format("YYYY-MM-DD");
     const timeStr = now.format("HH:mm:ss");
 
     let record = await Attendance.findOne({ cardUID, date: dateStr });
+
     if (!record) {
+      // First scan → IN
       record = new Attendance({
         cardUID,
         name: user.name,
@@ -77,12 +80,19 @@ app.post('/attendance', async (req, res) => {
         inTime: timeStr
       });
       await record.save();
-      return res.json({ message: 'Marked IN', record });
-    } else {
+      return res.json({ status: "IN", message: "Marked IN", record });
+    } 
+    else if (!record.outTime) {
+      // Second scan → OUT
       record.outTime = timeStr;
       await record.save();
-      return res.json({ message: 'Marked OUT', record });
+      return res.json({ status: "OUT", message: "Marked OUT", record });
+    } 
+    else {
+      // Already OUT → block further scans
+      return res.status(400).json({ status: "ALREADY_OUT", message: "Already marked OUT today" });
     }
+
   } catch (err) {
     console.error("Error in /attendance:", err);
     res.status(500).json({ error: err.message });
