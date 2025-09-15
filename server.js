@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -90,15 +89,33 @@ app.get('/attendance/month/:month', async (req, res) => {
 
 /* -------------------------------
    ATTENDANCE VIEW PAGE (EJS)
-   Full Calendar + Date Click
+   Two separate routes (no ? in param)
 --------------------------------*/
-app.get('/attendance-page/:date?', async (req, res) => {
-  try {
-    const selectedDate = req.params.date || req.query.date || moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
+// 1️⃣ Today’s attendance
+app.get('/attendance-page', async (req, res) => {
+  try {
+    const selectedDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
     const records = await Attendance.find({ date: selectedDate });
 
-    // Generate last 30 days for calendar
+    const dates = [];
+    for (let i = 0; i < 30; i++) {
+      dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
+    }
+
+    res.render("attendance", { records, selectedDate, dates });
+  } catch (err) {
+    console.error("Error loading attendance page:", err);
+    res.status(500).send("Error loading attendance page");
+  }
+});
+
+// 2️⃣ Specific date attendance
+app.get('/attendance-page/:date', async (req, res) => {
+  try {
+    const selectedDate = req.params.date;
+    const records = await Attendance.find({ date: selectedDate });
+
     const dates = [];
     for (let i = 0; i < 30; i++) {
       dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
