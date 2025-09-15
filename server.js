@@ -19,6 +19,9 @@ app.use(bodyParser.json());
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
+// ✅ Serve static files (for CSS/JS)
+app.use(express.static(path.join(__dirname, "public")));
+
 // Connect MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
@@ -45,37 +48,23 @@ app.post('/register', async (req, res) => {
    MARK ATTENDANCE
 --------------------------------*/
 app.post('/attendance', async (req, res) => {
-  console.log("POST body received:", req.body);
   try {
     const { cardUID } = req.body;
-    console.log("Card UID from ESP32:", cardUID);
-
     const user = await User.findOne({ cardUID });
-    if (!user) {
-      console.log("Card not registered:", cardUID);
-      return res.status(404).json({ message: 'Card not registered' });
-    }
+    if (!user) return res.status(404).json({ message: 'Card not registered' });
 
     const now = moment().tz("Asia/Kolkata");
     const dateStr = now.format("YYYY-MM-DD");
     const timeStr = now.format("HH:mm:ss");
 
     let record = await Attendance.findOne({ cardUID, date: dateStr });
-
     if (!record) {
-      record = new Attendance({
-        cardUID,
-        name: user.name,
-        date: dateStr,
-        inTime: timeStr
-      });
+      record = new Attendance({ cardUID, name: user.name, date: dateStr, inTime: timeStr });
       await record.save();
-      console.log("Marked IN for:", cardUID);
       return res.json({ message: 'Marked IN', record });
     } else {
       record.outTime = timeStr;
       await record.save();
-      console.log("Marked OUT for:", cardUID);
       return res.json({ message: 'Marked OUT', record });
     }
   } catch (err) {
@@ -87,15 +76,12 @@ app.post('/attendance', async (req, res) => {
 /* -------------------------------
    API ENDPOINTS
 --------------------------------*/
-
-// Today’s attendance (JSON API)
 app.get('/attendance/today', async (req, res) => {
   const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
   const records = await Attendance.find({ date: today });
   res.json(records);
 });
 
-// Full month attendance (JSON API)
 app.get('/attendance/month/:month', async (req, res) => {
   const { month } = req.params; // e.g. "2025-09"
   const records = await Attendance.find({ date: { $regex: `^${month}` } });
@@ -104,19 +90,17 @@ app.get('/attendance/month/:month', async (req, res) => {
 
 /* -------------------------------
    ATTENDANCE VIEW PAGE (EJS)
+   Full Calendar + Date Click
 --------------------------------*/
 app.get('/attendance-page/:date?', async (req, res) => {
   try {
-    const selectedDate =
-      req.params.date ||
-      req.query.date ||
-      moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    const selectedDate = req.params.date || req.query.date || moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
     const records = await Attendance.find({ date: selectedDate });
 
-    // Generate last 7 days list for sidebar
+    // Generate last 30 days for calendar
     const dates = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 30; i++) {
       dates.push(moment().tz("Asia/Kolkata").subtract(i, "days").format("YYYY-MM-DD"));
     }
 
@@ -128,17 +112,15 @@ app.get('/attendance-page/:date?', async (req, res) => {
 });
 
 /* -------------------------------
-   CRON JOB: Auto mark OUT at 23:59
+   CRON JOB: Auto mark OUT at 23:59 IST
 --------------------------------*/
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
-
     const result = await Attendance.updateMany(
       { date: today, outTime: { $exists: false } },
       { $set: { outTime: "23:59:59" } }
     );
-
     console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59 (IST)`);
   } catch (err) {
     console.error("❌ Error in auto OUT cron:", err);
