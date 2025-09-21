@@ -52,16 +52,37 @@ app.post('/register', async (req, res) => {
   try {
     let { name, cardUID } = req.body;
 
-    // Normalize UID (uppercase + padded to 8 chars)
+    // Trim inputs
+    name = name?.trim();
+    cardUID = cardUID?.trim();
+
+    // Server-side validation
+    if (!name || name.length < 3) {
+      return res.status(400).json({ error: 'Name must be at least 3 letters.' });
+    }
+    if (!cardUID || cardUID.length < 5 || cardUID.length > 16) {
+      return res.status(400).json({ error: 'Card UID must be between 5 and 16 characters.' });
+    }
+
+    // Normalize UID (uppercase + pad to 8 chars)
     cardUID = cardUID.toUpperCase().padStart(8, "0");
+
+    // Check if UID already exists
+    const existingUser = await User.findOne({ cardUID });
+    if (existingUser) {
+      return res.status(400).json({ error: 'This Card UID is already registered.' });
+    }
 
     const user = new User({ name, cardUID });
     await user.save();
+
     res.json({ message: 'User registered', user });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Error in /register:', err);
+    res.status(500).json({ error: 'Server error. Could not register user.' });
   }
 });
+
 
 // --------------------- MARK ATTENDANCE ---------------------
 app.post('/attendance', async (req, res) => {
