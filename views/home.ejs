@@ -12,6 +12,22 @@
     h1 {
       color: #007bff;
     }
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 80%;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background: #007bff;
+      color: white;
+    }
     a {
       display: inline-block;
       margin-top: 20px;
@@ -30,6 +46,33 @@
 <body>
   <h1>🚀 Smart Attendance System</h1>
   <p>Track and manage staff attendance easily.</p>
+  <h3>Today's Attendance - <%= todayDate %></h3>
+
+  <% if (records.length > 0) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Card UID</th>
+          <th>IN Time</th>
+          <th>OUT Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% records.forEach(record => { %>
+          <tr>
+            <td><%= record.name %></td>
+            <td><%= record.cardUID %></td>
+            <td><%= record.inTime %></td>
+            <td><%= record.outTime ? record.outTime : '-' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p>No attendance records for today.</p>
+  <% } %>
+
   <a href="/attendance-page">📅 View Attendance</a>
 </body>
 </html>
