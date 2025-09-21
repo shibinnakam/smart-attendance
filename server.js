@@ -32,8 +32,19 @@ mongoose.connect(process.env.MONGO_URI, {
 .catch(err => console.error('❌ MongoDB Error:', err));
 
 // --------------------- HOME PAGE ---------------------
-app.get('/', (req, res) => {
-  res.render('home');
+app.get('/', async (req, res) => {
+  try {
+    const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+
+    // Fetch today's attendance
+    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 });
+
+    // Render home.ejs with data
+    res.render('home', { todayDate, records });
+  } catch (err) {
+    console.error("Error fetching today's attendance:", err);
+    res.render('home', { todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), records: [] });
+  }
 });
 
 // --------------------- USER REGISTRATION ---------------------
