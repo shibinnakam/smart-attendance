@@ -28,6 +28,42 @@
       background: #007bff;
       color: white;
     }
+    form {
+      margin: 30px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 400px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: left;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .error {
+      color: red;
+      margin-bottom: 10px;
+    }
+    .success {
+      color: green;
+      margin-bottom: 10px;
+    }
     a {
       display: inline-block;
       margin-top: 20px;
@@ -73,6 +109,64 @@
     <p>No attendance records for today.</p>
   <% } %>
 
+  <h3>Add New User</h3>
+  <form id="registerForm">
+    <div class="error" id="error"></div>
+    <div class="success" id="success"></div>
+
+    <label>Name</label>
+    <input type="text" id="name" placeholder="Enter name (min 3 letters)" required>
+
+    <label>Card UID</label>
+    <input type="text" id="cardUID" placeholder="Enter ID (5-16 characters)" required>
+
+    <button type="submit">Add User</button>
+  </form>
+
   <a href="/attendance-page">📅 View Attendance</a>
+
+  <script>
+    const form = document.getElementById('registerForm');
+    const errorDiv = document.getElementById('error');
+    const successDiv = document.getElementById('success');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorDiv.textContent = '';
+      successDiv.textContent = '';
+
+      const name = document.getElementById('name').value.trim();
+      const cardUID = document.getElementById('cardUID').value.trim();
+
+      // Client-side validation
+      if (name.length < 3) {
+        errorDiv.textContent = 'Name must be at least 3 letters.';
+        return;
+      }
+      if (cardUID.length < 5 || cardUID.length > 16) {
+        errorDiv.textContent = 'Card UID must be 5-16 characters.';
+        return;
+      }
+
+      try {
+        const res = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, cardUID })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          successDiv.textContent = `User "${data.user.name}" registered successfully!`;
+          form.reset();
+        } else {
+          errorDiv.textContent = data.error || 'Error registering user.';
+        }
+      } catch (err) {
+        errorDiv.textContent = 'Server error. Please try again.';
+        console.error(err);
+      }
+    });
+  </script>
 </body>
 </html>
