@@ -77,11 +77,64 @@
     a:hover {
       background: #0056b3;
     }
+    /* NEW STYLES for summary */
+    .attendance-count {
+      font-weight: bold;
+    }
+    .count-good {
+      color: #28a745; /* Green */
+    }
+    .count-poor {
+      color: #ffc107; /* Yellow/Orange */
+    }
+    .count-critical {
+      color: #dc3545; /* Red */
+    }
   </style>
 </head>
 <body>
   <h1>🚀 Smart Attendance System</h1>
   <p>Track and manage staff attendance easily.</p>
+
+  <h3>Staff Working Days Summary (Last 6 Days)</h3>
+
+  <% if (staffSummary && staffSummary.length > 0) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Card UID</th>
+          <th>Working Days (Days In / 6)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% staffSummary.forEach(user => { %>
+          <tr>
+            <td><%= user.name %></td>
+            <td><%= user.cardUID %></td>
+            <td>
+              <% 
+                let statusClass = 'count-critical';
+                if (user.presentDays >= 5) {
+                  statusClass = 'count-good';
+                } else if (user.presentDays >= 3) {
+                  statusClass = 'count-poor';
+                }
+              %>
+              <span class="attendance-count <%= statusClass %>">
+                <%= user.presentDays %>
+              </span>
+              / <%= user.totalDays %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p>No registered users found for weekly summary.</p>
+  <% } %>
+
+  <hr style="border: 0; border-top: 1px solid #ccc; width: 80%; margin: 40px auto;">
   <h3>Today's Attendance - <%= todayDate %></h3>
 
   <% if (records.length > 0) { %>

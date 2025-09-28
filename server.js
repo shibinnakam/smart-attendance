@@ -31,20 +31,72 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log('✅ MongoDB Connected'))
 .catch(err => console.error('❌ MongoDB Error:', err));
 
+// --------------------- STAFF SUMMARY FUNCTION ---------------------
+/**
+ * Fetches all registered users and calculates their attendance count
+ * for the last 6 days (excluding today).
+ * @returns {Array} An array of user summaries.
+ */
+async function getStaffSummary() {
+    // 1. Get the last 6 dates (excluding today)
+    const dates = [];
+    for (let i = 1; i <= 6; i++) {
+        dates.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
+    }
+
+    // 2. Fetch all registered users
+    const allUsers = await User.find({}).lean(); // Use .lean() for performance
+
+    // 3. Fetch attendance records for all users within the last 6 days
+    const attendanceRecords = await Attendance.find({
+        date: { $in: dates }
+    }).lean();
+
+    // 4. Summarize attendance for each user
+    const summary = allUsers.map(user => {
+        // Count unique dates the user was present
+        const presentDays = new Set(
+            attendanceRecords
+                .filter(rec => rec.cardUID === user.cardUID)
+                .map(rec => rec.date)
+        ).size;
+
+        return {
+            name: user.name,
+            cardUID: user.cardUID,
+            presentDays: presentDays,
+            totalDays: 6 // The standard number of days to check against
+        };
+    });
+
+    return summary;
+}
+
 // --------------------- HOME PAGE ---------------------
 app.get('/', async (req, res) => {
-  try {
-    const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    try {
+        const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
-    // Fetch today's attendance
-    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 });
+        // Fetch today's attendance records
+        const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 });
 
-    // Render home.ejs with data
-    res.render('home', { todayDate, records });
-  } catch (err) {
-    console.error("Error fetching today's attendance:", err);
-    res.render('home', { todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), records: [] });
-  }
+        // Fetch the staff summary for the last 6 working days
+        const staffSummary = await getStaffSummary();
+
+        // Render home.ejs with all necessary data
+        res.render('home', { 
+            todayDate, 
+            records,
+            staffSummary // <--- NEW DATA ADDED
+        });
+    } catch (err) {
+        console.error("Error fetching data for home page:", err);
+        res.render('home', { 
+            todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), 
+            records: [], 
+            staffSummary: [] // <--- Pass empty array on error
+        });
+    }
 });
 
 // --------------------- USER REGISTRATION ---------------------
