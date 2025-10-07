@@ -124,7 +124,6 @@
     </div>
 
     <h2>Today's Attendance</h2>
-    <p>
     <% if (mergedRecords && mergedRecords.length > 0) { %>
       <table>
         <thead>
@@ -133,21 +132,21 @@
             <th>Card UID</th>
             <th>IN Time</th>
             <th>OUT Time</th>
-            <th>Total Workdays (Last 7 Days)</th>
+            <th>Total Workdays (Last 6 Days)</th>
           </tr>
         </thead>
         <tbody>
           <% mergedRecords.forEach(r => { 
             let statusClass = 'count-critical';
-            if (r.totalWorkdays >= 6) statusClass = 'count-good';
-            else if (r.totalWorkdays >= 4) statusClass = 'count-poor';
+            if (r.totalWorkdays >= 5) statusClass = 'count-good';
+            else if (r.totalWorkdays >= 3) statusClass = 'count-poor';
           %>
           <tr>
             <td><%= r.name %></td>
             <td><%= r.cardUID %></td>
             <td><%= r.inTime %></td>
             <td><%= r.outTime %></td>
-            <td><span class="attendance-count <%= statusClass %>"><%= r.totalWorkdays %> / 7</span></td>
+            <td><span class="attendance-count <%= statusClass %>"><%= r.totalWorkdays %> / 6</span></td>
           </tr>
           <% }) %>
         </tbody>
