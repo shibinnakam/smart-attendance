@@ -115,53 +115,44 @@
       </div>
       <div class="card">
         <h3>Total Present Today</h3>
-        <p><%= records ? records.length : 0 %></p>
+        <p><%= mergedRecords ? mergedRecords.filter(r => r.inTime !== '-').length : 0 %></p>
       </div>
       <div class="card">
         <h3>Registered Users</h3>
-        <p><%= staffSummary ? staffSummary.length : 0 %></p>
+        <p><%= mergedRecords ? mergedRecords.length : 0 %></p>
       </div>
     </div>
 
-    <h2>Staff Working Summary (Last 6 Days)</h2>
-    <% if (staffSummary && staffSummary.length > 0) { %>
+    <h2>Today's Attendance with Weekly Workdays</h2>
+    <% if (mergedRecords && mergedRecords.length > 0) { %>
       <table>
-        <thead><tr><th>Name</th><th>Card UID</th><th>Working Days (In / 6)</th></tr></thead>
-        <tbody>
-          <% staffSummary.forEach(user => {
-            let statusClass = 'count-critical';
-            if (user.presentDays >= 5) statusClass = 'count-good';
-            else if (user.presentDays >= 3) statusClass = 'count-poor';
-          %>
+        <thead>
           <tr>
-            <td><%= user.name %></td>
-            <td><%= user.cardUID %></td>
-            <td><span class="attendance-count <%= statusClass %>"><%= user.presentDays %> / <%= user.totalDays || 6 %></span></td>
+            <th>Name</th>
+            <th>Card UID</th>
+            <th>IN Time</th>
+            <th>OUT Time</th>
+            <th>Total Workdays (Last 7 Days)</th>
           </tr>
-          <% }) %>
-        </tbody>
-      </table>
-    <% } else { %>
-      <p>No staff summary available.</p>
-    <% } %>
-
-    <h2>Today's Attendance</h2>
-    <% if (records && records.length > 0) { %>
-      <table>
-        <thead><tr><th>Name</th><th>Card UID</th><th>IN Time</th><th>OUT Time</th></tr></thead>
+        </thead>
         <tbody>
-          <% records.forEach(r => { %>
+          <% mergedRecords.forEach(r => { 
+            let statusClass = 'count-critical';
+            if (r.totalWorkdays >= 6) statusClass = 'count-good';
+            else if (r.totalWorkdays >= 4) statusClass = 'count-poor';
+          %>
           <tr>
             <td><%= r.name %></td>
             <td><%= r.cardUID %></td>
             <td><%= r.inTime %></td>
-            <td><%= r.outTime || '-' %></td>
+            <td><%= r.outTime %></td>
+            <td><span class="attendance-count <%= statusClass %>"><%= r.totalWorkdays %> / 7</span></td>
           </tr>
           <% }) %>
         </tbody>
       </table>
     <% } else { %>
-      <p>No attendance records for today.</p>
+      <p>No attendance records found.</p>
     <% } %>
   </div>
 
@@ -194,7 +185,6 @@
       msg.textContent = '';
       const name = document.getElementById('name').value.trim();
       const cardUID = document.getElementById('cardUID').value.trim();
-
       if (name.length < 3) { msg.innerHTML = '<div class="error">Name must be at least 3 letters.</div>'; return; }
       if (cardUID.length < 5 || cardUID.length > 16) { msg.innerHTML = '<div class="error">Card UID must be between 5–16 characters.</div>'; return; }
 
