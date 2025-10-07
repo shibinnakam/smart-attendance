@@ -38,77 +38,80 @@ mongoose.connect(process.env.MONGO_URI, {
  * @returns {Array} An array of user summaries.
  */
 async function getStaffSummary() {
-    // 1. Get the last 6 dates (excluding today)
-    const dates = [];
-    for (let i = 1; i <= 6; i++) {
-        dates.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
-    }
+  // 1. Get the last 6 dates (excluding today)
+  const dates = [];
+  for (let i = 1; i <= 6; i++) {
+    dates.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
+  }
 
-    // 2. Fetch all registered users
-    const allUsers = await User.find({}).lean(); // Use .lean() for performance
+  // 2. Fetch all registered users
+  const allUsers = await User.find({}).lean();
 
-    // 3. Fetch attendance records for all users within the last 6 days
-    const attendanceRecords = await Attendance.find({
-        date: { $in: dates }
-    }).lean();
+  // 3. Fetch attendance records for all users within the last 6 days
+  const attendanceRecords = await Attendance.find({
+    date: { $in: dates }
+  }).lean();
 
-    // 4. Summarize attendance for each user
-    const summary = allUsers.map(user => {
-        // Count unique dates the user was present
-        const presentDays = new Set(
-            attendanceRecords
-                .filter(rec => rec.cardUID === user.cardUID)
-                .map(rec => rec.date)
-        ).size;
+  // 4. Summarize attendance for each user
+  const summary = allUsers.map(user => {
+    const presentDays = new Set(
+      attendanceRecords
+        .filter(rec => rec.cardUID === user.cardUID)
+        .map(rec => rec.date)
+    ).size;
 
-        return {
-            name: user.name,
-            cardUID: user.cardUID,
-            presentDays: presentDays,
-            totalDays: 6 // The standard number of days to check against
-        };
-    });
+    return {
+      name: user.name,
+      cardUID: user.cardUID,
+      presentDays: presentDays,
+      totalDays: 6
+    };
+  });
 
-    return summary;
+  return summary;
 }
 
 // --------------------- HOME PAGE ---------------------
 app.get('/', async (req, res) => {
-    try {
-        const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+  try {
+    const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
-        // Fetch today's attendance records
-        const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 });
+    // Fetch today's attendance records
+    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 });
 
-        // Fetch the staff summary for the last 6 working days
-        const staffSummary = await getStaffSummary();
+    // Fetch summary for the last 6 working days
+    const staffSummary = await getStaffSummary();
 
-        // Render home.ejs with all necessary data
-        res.render('home', { 
-            todayDate, 
-            records,
-            staffSummary // <--- NEW DATA ADDED
-        });
-    } catch (err) {
-        console.error("Error fetching data for home page:", err);
-        res.render('home', { 
-            todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), 
-            records: [], 
-            staffSummary: [] // <--- Pass empty array on error
-        });
-    }
+    // Merge today's IN/OUT with summary
+    const mergedSummary = staffSummary.map(staff => {
+      const todayRecord = records.find(r => r.cardUID === staff.cardUID);
+      return {
+        cardUID: staff.cardUID,
+        name: staff.name,
+        inTime: todayRecord ? todayRecord.inTime : '-',
+        outTime: todayRecord ? (todayRecord.outTime || '-') : '-',
+        presentDays: `${staff.presentDays}/${staff.totalDays}`
+      };
+    });
+
+    // Render the home page with merged data
+    res.render('home', { todayDate, mergedSummary });
+  } catch (err) {
+    console.error("Error fetching data for home page:", err);
+    res.render('home', {
+      todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"),
+      mergedSummary: []
+    });
+  }
 });
 
 // --------------------- USER REGISTRATION ---------------------
 app.post('/register', async (req, res) => {
   try {
     let { name, cardUID } = req.body;
-
-    // Trim inputs
     name = name?.trim();
     cardUID = cardUID?.trim();
 
-    // Server-side validation
     if (!name || name.length < 3) {
       return res.status(400).json({ error: 'Name must be at least 3 letters.' });
     }
@@ -116,10 +119,10 @@ app.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Card UID must be between 5 and 16 characters.' });
     }
 
-    // Normalize UID (uppercase + pad to 8 chars)
+    // Normalize UID
     cardUID = cardUID.toUpperCase().padStart(8, "0");
 
-    // Check if UID already exists
+    // Check if UID exists
     const existingUser = await User.findOne({ cardUID });
     if (existingUser) {
       return res.status(400).json({ error: 'This Card UID is already registered.' });
@@ -135,13 +138,10 @@ app.post('/register', async (req, res) => {
   }
 });
 
-
 // --------------------- MARK ATTENDANCE ---------------------
 app.post('/attendance', async (req, res) => {
   try {
     let { cardUID } = req.body;
-
-    // Normalize UID (uppercase + padded to 8 chars)
     cardUID = cardUID.toUpperCase().padStart(8, "0");
 
     const user = await User.findOne({ cardUID });
@@ -156,7 +156,6 @@ app.post('/attendance', async (req, res) => {
     let record = await Attendance.findOne({ cardUID, date: dateStr });
 
     if (!record) {
-      // First scan → IN
       record = new Attendance({
         cardUID,
         name: user.name,
@@ -165,15 +164,11 @@ app.post('/attendance', async (req, res) => {
       });
       await record.save();
       return res.json({ status: "IN", message: "Marked IN", record });
-    } 
-    else if (!record.outTime) {
-      // Second scan → OUT
+    } else if (!record.outTime) {
       record.outTime = timeStr;
       await record.save();
       return res.json({ status: "OUT", message: "Marked OUT", record });
-    } 
-    else {
-      // Already OUT → block further scans
+    } else {
       return res.status(400).json({ status: "ALREADY_OUT", message: "Already marked OUT today" });
     }
 
@@ -183,10 +178,7 @@ app.post('/attendance', async (req, res) => {
   }
 });
 
-
 // --------------------- ATTENDANCE VIEW ---------------------
-
-// Function to generate last 7 days for sidebar
 function getLast7Days() {
   const days = [];
   for (let i = 0; i < 7; i++) {
@@ -195,7 +187,7 @@ function getLast7Days() {
   return days;
 }
 
-// 1️⃣ Today attendance
+// Today attendance
 app.get('/attendance-page', async (req, res) => {
   try {
     const selectedDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
@@ -209,7 +201,7 @@ app.get('/attendance-page', async (req, res) => {
   }
 });
 
-// 2️⃣ Specific date
+// Specific date attendance
 app.get('/attendance-page/:date', async (req, res) => {
   try {
     const selectedDate = req.params.date;
