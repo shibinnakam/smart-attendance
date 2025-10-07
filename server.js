@@ -25,84 +25,62 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --------------------- DATABASE ---------------------
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB Connected'))
-.catch(err => console.error('❌ MongoDB Error:', err));
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch((err) => console.error('❌ MongoDB Error:', err));
 
-// --------------------- STAFF SUMMARY FUNCTION ---------------------
-async function getStaffSummary() {
+// --------------------- UTILITY FUNCTIONS ---------------------
+function getLastNDates(n, excludeToday = false) {
   const dates = [];
-  for (let i = 1; i <= 6; i++) {
+  const start = excludeToday ? 1 : 0;
+  for (let i = start; i < n + start; i++) {
     dates.push(moment().tz('Asia/Kolkata').subtract(i, 'days').format('YYYY-MM-DD'));
   }
-
-  const allUsers = await User.find({}).lean();
-  const attendanceRecords = await Attendance.find({ date: { $in: dates } }).lean();
-
-  const summary = allUsers.map(user => {
-    const presentDays = new Set(
-      attendanceRecords.filter(rec => rec.cardUID === user.cardUID).map(r => r.date)
-    ).size;
-
-    return {
-      name: user.name,
-      cardUID: user.cardUID,
-      presentDays,
-      totalDays: 6
-    };
-  });
-
-  return summary;
+  return dates;
 }
 
 // --------------------- HOME PAGE ---------------------
 app.get('/', async (req, res) => {
   try {
-    const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    const todayDate = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
 
     // Fetch today's attendance
-    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 }).lean();
+    const todayRecords = await Attendance.find({ date: todayDate }).sort({ inTime: 1 }).lean();
 
     // Fetch all users
     const users = await User.find({}).lean();
 
-    // Last 6 days (excluding today)
-    const last6Dates = [];
-    for (let i = 1; i <= 6; i++) {
-      last6Dates.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
-    }
+    // Fetch last 6 days attendance (excluding today)
+    const last6Dates = getLastNDates(6, true);
+    const attendanceLast6 = await Attendance.find({ date: { $in: last6Dates } }).lean();
 
-    // Attendance records for last 6 days
-    const attendanceLast6 = await Attendance.find({
-      date: { $in: last6Dates }
-    }).lean();
-
-    // Merge today's IN/OUT with last 6 days workdays
-    const mergedRecords = users.map(user => {
-      const todayRecord = records.find(r => r.cardUID === user.cardUID);
-      const workdays = new Set(
-        attendanceLast6
-          .filter(r => r.cardUID === user.cardUID)
-          .map(r => r.date)
+    // Merge today's data with last 6 days attendance count
+    const mergedRecords = users.map((user) => {
+      const todayRecord = todayRecords.find((r) => r.cardUID === user.cardUID);
+      const totalWorkdays = new Set(
+        attendanceLast6.filter((r) => r.cardUID === user.cardUID).map((r) => r.date)
       ).size;
 
       return {
         name: user.name,
         cardUID: user.cardUID,
         inTime: todayRecord ? todayRecord.inTime : '-',
-        outTime: todayRecord ? (todayRecord.outTime || '-') : '-',
-        totalWorkdays: workdays
+        outTime: todayRecord ? todayRecord.outTime || '-' : '-',
+        totalWorkdays,
       };
     });
 
     res.render('home', { todayDate, mergedRecords });
-
   } catch (err) {
-    console.error("Error fetching data for home page:", err);
-    res.render('home', { todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), mergedRecords: [] });
+    console.error('❌ Error fetching home page data:', err);
+    res.render('home', {
+      todayDate: moment().tz('Asia/Kolkata').format('YYYY-MM-DD'),
+      mergedRecords: [],
+    });
   }
 });
 
@@ -113,20 +91,23 @@ app.post('/register', async (req, res) => {
     name = name?.trim();
     cardUID = cardUID?.trim();
 
-    if (!name || name.length < 3) return res.status(400).json({ error: 'Name must be at least 3 letters.' });
-    if (!cardUID || cardUID.length < 5 || cardUID.length > 16) return res.status(400).json({ error: 'Card UID must be between 5–16 characters.' });
+    if (!name || name.length < 3)
+      return res.status(400).json({ error: 'Name must be at least 3 letters.' });
+    if (!cardUID || cardUID.length < 5 || cardUID.length > 16)
+      return res.status(400).json({ error: 'Card UID must be between 5–16 characters.' });
 
     cardUID = cardUID.toUpperCase().padStart(8, '0');
 
     const existingUser = await User.findOne({ cardUID });
-    if (existingUser) return res.status(400).json({ error: 'This Card UID is already registered.' });
+    if (existingUser)
+      return res.status(400).json({ error: 'This Card UID is already registered.' });
 
     const user = new User({ name, cardUID });
     await user.save();
 
     res.json({ user, message: 'User registered successfully' });
   } catch (err) {
-    console.error('Error in /register:', err);
+    console.error('❌ Error in /register:', err);
     res.status(500).json({ error: 'Server error. Could not register user.' });
   }
 });
@@ -147,10 +128,12 @@ app.post('/attendance', async (req, res) => {
     let record = await Attendance.findOne({ cardUID, date: dateStr });
 
     if (!record) {
+      // Mark IN
       record = new Attendance({ cardUID, name: user.name, date: dateStr, inTime: timeStr });
       await record.save();
       return res.json({ status: 'IN', message: 'Marked IN', record });
     } else if (!record.outTime) {
+      // Mark OUT
       record.outTime = timeStr;
       await record.save();
       return res.json({ status: 'OUT', message: 'Marked OUT', record });
@@ -158,28 +141,20 @@ app.post('/attendance', async (req, res) => {
       return res.status(400).json({ status: 'ALREADY_OUT', message: 'Already marked OUT today' });
     }
   } catch (err) {
-    console.error('Error in /attendance:', err);
+    console.error('❌ Error in /attendance:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // --------------------- ATTENDANCE VIEW ---------------------
-function getLast7Days() {
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    days.push(moment().tz('Asia/Kolkata').subtract(i, 'days').format('YYYY-MM-DD'));
-  }
-  return days;
-}
-
 app.get('/attendance-page', async (req, res) => {
   try {
     const selectedDate = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
     const records = await Attendance.find({ date: selectedDate }).sort({ inTime: 1 }).lean();
-    const dates = getLast7Days();
+    const dates = getLastNDates(6); // show 6 days only
     res.render('attendance', { records, selectedDate, dates });
   } catch (err) {
-    console.error('Error loading attendance page:', err);
+    console.error('❌ Error loading attendance page:', err);
     res.status(500).send('Error loading attendance page');
   }
 });
@@ -188,10 +163,10 @@ app.get('/attendance-page/:date', async (req, res) => {
   try {
     const selectedDate = req.params.date;
     const records = await Attendance.find({ date: selectedDate }).sort({ inTime: 1 }).lean();
-    const dates = getLast7Days();
+    const dates = getLastNDates(6);
     res.render('attendance', { records, selectedDate, dates });
   } catch (err) {
-    console.error('Error loading attendance page:', err);
+    console.error('❌ Error loading attendance page:', err);
     res.status(500).send('Error loading attendance page');
   }
 });
@@ -200,7 +175,10 @@ app.get('/attendance-page/:date', async (req, res) => {
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
-    const result = await Attendance.updateMany({ date: today, outTime: { $exists: false } }, { $set: { outTime: '23:59:59' } });
+    const result = await Attendance.updateMany(
+      { date: today, outTime: { $exists: false } },
+      { $set: { outTime: '23:59:59' } }
+    );
     console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59 (IST)`);
   } catch (err) {
     console.error('❌ Error in auto OUT cron:', err);
