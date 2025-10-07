@@ -61,14 +61,48 @@ async function getStaffSummary() {
 // --------------------- HOME PAGE ---------------------
 app.get('/', async (req, res) => {
   try {
-    const todayDate = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
-    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 }).lean();
-    const staffSummary = await getStaffSummary();
+    const todayDate = moment().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
-    res.render('home', { todayDate, records, staffSummary });
+    // Fetch today's attendance
+    const records = await Attendance.find({ date: todayDate }).sort({ inTime: 1 }).lean();
+
+    // Fetch all users
+    const users = await User.find({}).lean();
+
+    // Last 6 days (excluding today)
+    const last6Dates = [];
+    for (let i = 1; i <= 6; i++) {
+      last6Dates.push(moment().tz("Asia/Kolkata").subtract(i, 'days').format("YYYY-MM-DD"));
+    }
+
+    // Attendance records for last 6 days
+    const attendanceLast6 = await Attendance.find({
+      date: { $in: last6Dates }
+    }).lean();
+
+    // Merge today's IN/OUT with last 6 days workdays
+    const mergedRecords = users.map(user => {
+      const todayRecord = records.find(r => r.cardUID === user.cardUID);
+      const workdays = new Set(
+        attendanceLast6
+          .filter(r => r.cardUID === user.cardUID)
+          .map(r => r.date)
+      ).size;
+
+      return {
+        name: user.name,
+        cardUID: user.cardUID,
+        inTime: todayRecord ? todayRecord.inTime : '-',
+        outTime: todayRecord ? (todayRecord.outTime || '-') : '-',
+        totalWorkdays: workdays
+      };
+    });
+
+    res.render('home', { todayDate, mergedRecords });
+
   } catch (err) {
-    console.error('Error fetching data for home page:', err);
-    res.render('home', { todayDate: moment().tz('Asia/Kolkata').format('YYYY-MM-DD'), records: [], staffSummary: [] });
+    console.error("Error fetching data for home page:", err);
+    res.render('home', { todayDate: moment().tz("Asia/Kolkata").format("YYYY-MM-DD"), mergedRecords: [] });
   }
 });
 
