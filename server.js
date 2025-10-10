@@ -34,10 +34,9 @@ mongoose
   .catch((err) => console.error('❌ MongoDB Error:', err));
 
 // --------------------- UTILITY FUNCTIONS ---------------------
-function getLastNDates(n, excludeToday = false) {
+function getLastNDates(n, includeToday = true) {
   const dates = [];
-  const start = excludeToday ? 1 : 0;
-  for (let i = start; i < n + start; i++) {
+  for (let i = 0; i < n; i++) {
     dates.push(moment().tz('Asia/Kolkata').subtract(i, 'days').format('YYYY-MM-DD'));
   }
   return dates;
@@ -54,11 +53,11 @@ app.get('/', async (req, res) => {
     // Fetch all users
     const users = await User.find({}).lean();
 
-    // Fetch last 6 days attendance (excluding today)
+    // Fetch attendance for last 6 days (including today)
     const last6Dates = getLastNDates(6, true);
     const attendanceLast6 = await Attendance.find({ date: { $in: last6Dates } }).lean();
 
-    // Merge today's data with last 6 days attendance count
+    // Merge attendance info
     const mergedRecords = users.map((user) => {
       const todayRecord = todayRecords.find((r) => r.cardUID === user.cardUID);
       const totalWorkdays = new Set(
@@ -151,7 +150,7 @@ app.get('/attendance-page', async (req, res) => {
   try {
     const selectedDate = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
     const records = await Attendance.find({ date: selectedDate }).sort({ inTime: 1 }).lean();
-    const dates = getLastNDates(6); // show 6 days only
+    const dates = getLastNDates(6);
     res.render('attendance', { records, selectedDate, dates });
   } catch (err) {
     console.error('❌ Error loading attendance page:', err);
@@ -171,7 +170,9 @@ app.get('/attendance-page/:date', async (req, res) => {
   }
 });
 
-// --------------------- CRON JOB ---------------------
+// --------------------- CRON JOBS ---------------------
+
+// Auto mark OUT at 23:59 for those who forgot
 cron.schedule('59 23 * * *', async () => {
   try {
     const today = moment().tz('Asia/Kolkata').format('YYYY-MM-DD');
@@ -182,6 +183,32 @@ cron.schedule('59 23 * * *', async () => {
     console.log(`✅ Auto OUT updated for ${result.modifiedCount} staff at 23:59 (IST)`);
   } catch (err) {
     console.error('❌ Error in auto OUT cron:', err);
+  }
+});
+
+// Optional: Recalculate summary daily at midnight
+cron.schedule('5 0 * * *', async () => {
+  try {
+    console.log('🔄 Daily summary recalculation started...');
+    const last6Dates = getLastNDates(6, true);
+    const users = await User.find({}).lean();
+
+    for (const user of users) {
+      const totalWorkdays = new Set(
+        (
+          await Attendance.find({
+            cardUID: user.cardUID,
+            date: { $in: last6Dates },
+          }).lean()
+        ).map((r) => r.date)
+      ).size;
+
+      await User.updateOne({ cardUID: user.cardUID }, { $set: { last6DaysWork: totalWorkdays } });
+    }
+
+    console.log('✅ Daily summary updated successfully at 00:05 IST');
+  } catch (err) {
+    console.error('❌ Error updating daily summary:', err);
   }
 });
 
